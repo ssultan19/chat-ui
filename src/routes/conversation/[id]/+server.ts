@@ -130,6 +130,10 @@ export async function POST({ request, locals, params, getClientAddress }) {
 		throw error(410, "Model not available anymore");
 	}
 
+	// Pass userid and sessionId to the model as a configurable
+	model.config.configurable.user_id = String(userId);
+	model.config.configurable.session_id = String(id);
+
 	// finally parse the content of the request
 	const form = await request.formData();
 
