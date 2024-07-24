@@ -36,7 +36,7 @@ export async function POST({ params, request, locals }) {
 
 	
 	// Update and set the ES message ID to the Message to Write ID
-	const r = await fetch("http://127.0.0.1:9200/ati-search-history/_update_by_query", {
+	const r = await fetch("http://eschat:9200/ati-search-history/_update_by_query", {
 		method: "POST",
 		headers: {
 			"Content-Type": "application/json",

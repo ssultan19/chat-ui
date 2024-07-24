@@ -456,7 +456,7 @@ export async function POST({ request, locals, params, getClientAddress }) {
 
 
 			// Query latest message from ElasticSearch
-			let r = await fetch("http://127.0.0.1:9200/ati-search-history/_search", {
+			let r = await fetch("http://eschat:9200/ati-search-history/_search", {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
@@ -496,7 +496,7 @@ export async function POST({ request, locals, params, getClientAddress }) {
 					const ESmessageID = res[0]._source.message_id;
 
 					// Update and set the ES message ID to the Message to Write ID
-					r = await fetch("http://127.0.0.1:9200/ati-search-history/_update_by_query", {
+					r = await fetch("http://eschat:9200/ati-search-history/_update_by_query", {
 						method: "POST",
 						headers: {
 							"Content-Type": "application/json",
