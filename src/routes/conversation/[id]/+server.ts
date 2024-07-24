@@ -451,6 +451,94 @@ export async function POST({ request, locals, params, getClientAddress }) {
 			// used to detect if cancel() is called bc of interrupt or just because the connection closes
 			doneStreaming = true;
 
+
+
+
+
+			// Query latest message from ElasticSearch
+			let r = await fetch("http://127.0.0.1:9200/ati-search-history/_search", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({
+					"size": 1,
+					"sort": [
+					{
+						"created_at": {
+						"order": "desc"
+						}
+					}
+					],
+					"query": {
+					"bool": {
+						"must": [
+							{
+							"match": {
+								"user_id": `${userId}`
+							}
+							},
+							{
+							"match": {
+								"session_id": `${convId}`
+							}
+							}
+						]
+					}
+					}
+				}),
+			});
+
+			if(r.ok){
+				let res = await r.json();
+				res = res.hits.hits;
+				if(res.length > 0){
+					const ESmessageID = res[0]._source.message_id;
+
+					// Update and set the ES message ID to the Message to Write ID
+					r = await fetch("http://127.0.0.1:9200/ati-search-history/_update_by_query", {
+						method: "POST",
+						headers: {
+							"Content-Type": "application/json",
+						},
+						body: JSON.stringify({
+							"script": {
+							"inline": `ctx._source.message_id = '${messageToWriteToId}'`,
+							"lang": "painless"
+							},
+							"query": {
+							"bool": {
+								"must": [
+									{
+									"match": {
+										"message_id": `${ESmessageID}`
+									}
+									},
+									{
+									"match": {
+										"user_id": `${userId}`
+									}
+									},
+									{
+									"match": {
+										"session_id": `${convId}`
+									}
+									}
+								]
+							}
+							}
+						}),
+					});
+					
+				}
+			}
+			// End of Updating ES
+
+
+
+
+
+
 			controller.close();
 		},
 		async cancel() {
