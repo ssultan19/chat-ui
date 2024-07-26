@@ -134,6 +134,8 @@ export async function POST({ request, locals, params, getClientAddress }) {
 	model.config.configurable.user_id = String(userId);
 	model.config.configurable.session_id = String(id);
 
+	//console.log("-------------->>> ", request.headers.get('cookie') );
+
 	// finally parse the content of the request
 	const form = await request.formData();
 
