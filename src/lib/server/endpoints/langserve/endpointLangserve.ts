@@ -28,15 +28,17 @@ export function endpointLangserve(
 		let ms = messages.filter(m=> ( ("id" in m) && ("from" in m && m["from"] == "user") ) );
 
 		const r = await fetch(`${url}/stream`, {
+			credentials: "same-origin",
 			method: "POST",
 			headers: {
 				"Content-Type": "application/json",
+				"Cookie": model.config.configurable.cookie
 			},
 			body: JSON.stringify({
-				input: ms.length <= 0 ? "" : ms[ms.length - 1].content , //{ text: prompt },
+				input: prompt, //{text: prompt}, //ms.length <= 0 ? "" : ms[ms.length - 1].content ,
 				config: { configurable: {
-								user_id: model.config.configurable.user_id,
-								session_id: model.config.configurable.session_id
+								user_id: ms.length <= 0 ? "-1" : model.config.configurable.user_id,
+								session_id: ms.length <= 0 ? "-1" : model.config.configurable.session_id
 							} },
 			}),
 		});
