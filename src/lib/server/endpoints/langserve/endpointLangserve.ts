@@ -28,7 +28,7 @@ export function endpointLangserve(
 		let ms = messages.filter(m=> ( ("id" in m) && ("from" in m && m["from"] == "user") ) );
 
 		//console.log("Cookie--------------------------->>>", model.config.configurable.cookie, model.config.configurable.session_id);
-		console.log("Messages: --------------------->>>", messages.length );
+		//console.log("Messages: --------------------->>>", messages.length );
 
 		const r = await fetch(`${url}/stream`, {
 			credentials: "same-origin",
