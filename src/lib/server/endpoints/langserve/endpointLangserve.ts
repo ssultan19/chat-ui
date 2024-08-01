@@ -27,6 +27,9 @@ export function endpointLangserve(
 		// Get the messages that are from users
 		let ms = messages.filter(m=> ( ("id" in m) && ("from" in m && m["from"] == "user") ) );
 
+		//console.log("Cookie--------------------------->>>", model.config.configurable.cookie, model.config.configurable.session_id);
+		console.log("Messages: --------------------->>>", messages.length );
+
 		const r = await fetch(`${url}/stream`, {
 			credentials: "same-origin",
 			method: "POST",
@@ -35,7 +38,7 @@ export function endpointLangserve(
 				"Cookie": model.config.configurable.cookie
 			},
 			body: JSON.stringify({
-				input: prompt, //{text: prompt}, //ms.length <= 0 ? "" : ms[ms.length - 1].content ,
+				input: prompt,
 				config: { configurable: {
 								user_id: ms.length <= 0 ? "-1" : model.config.configurable.user_id,
 								session_id: ms.length <= 0 ? "-1" : model.config.configurable.session_id
@@ -53,6 +56,7 @@ export function endpointLangserve(
 		return (async function* () {
 			let stop = false;
 			let generatedText = "";
+			let context = [];
 			let tokenId = 0;
 			let accumulatedData = ""; // Buffer to accumulate data chunks
 
@@ -115,11 +119,22 @@ export function endpointLangserve(
 						}
 						// Assuming content within data is a plain string
 						if (data) {
-							generatedText += data;
+							// Pull out the Context and answer seperately
+							let _context = {},
+								_answer = "";
+							if(data.hasOwnProperty("answer")){
+								_answer = data['answer'];
+							}
+							if(data.hasOwnProperty("context")){
+								_context = data['context'];
+							}
+							generatedText += _answer;
+							if(_context.length > 0)
+								context = context.concat(_context);
 							const output: TextGenerationStreamOutput = {
 								token: {
 									id: tokenId++,
-									text: data,
+									text: _answer,
 									logprob: 0,
 									special: false,
 								},

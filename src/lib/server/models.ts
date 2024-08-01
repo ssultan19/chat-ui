@@ -66,8 +66,8 @@ const modelConfig = z.object({
 	unlisted: z.boolean().default(false),
 	embeddingModel: validateEmbeddingModelByName(embeddingModels).optional(),
 	configurable: z.object({
-		user_id: z.string().default("0"),
-		session_id: z.string().default(""),
+		user_id: z.string().default("-1"),
+		session_id: z.string().default("-1"),
 		cookie: z.string().default("")
 	}).passthrough().default({}),
 });
