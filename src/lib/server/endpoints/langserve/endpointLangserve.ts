@@ -38,7 +38,7 @@ export function endpointLangserve(
 				"Cookie": model.config.configurable.cookie
 			},
 			body: JSON.stringify({
-				input: prompt,
+				input: ms.length <= 0? prompt : ms[ms.length - 1].content , //prompt,
 				config: { configurable: {
 								user_id: ms.length <= 0 ? "-1" : model.config.configurable.user_id,
 								session_id: ms.length <= 0 ? "-1" : model.config.configurable.session_id
