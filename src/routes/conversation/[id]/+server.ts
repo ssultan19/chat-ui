@@ -1,4 +1,6 @@
 import { env } from "$env/dynamic/private";
+//import { env } from "$env/dynamic/private";
+//import { env as envPublic } from "$env/dynamic/public";
 import { startOfHour } from "date-fns";
 import { authCondition, requiresUser } from "$lib/server/auth";
 import { collections } from "$lib/server/database";
@@ -23,6 +25,9 @@ import { usageLimits } from "$lib/server/usageLimits";
 import { MetricsServer } from "$lib/server/metrics";
 import { textGeneration } from "$lib/server/textGeneration";
 import type { TextGenerationContext } from "$lib/server/textGeneration/types";
+import { ESChatHistorySave, ESChatHistoryDelete } from "$lib/utils/elasticsearchLog.js";
+import { Client } from '@elastic/elasticsearch';
+
 
 export async function POST({ request, locals, params, getClientAddress }) {
 	const id = z.string().parse(params.id);
@@ -133,8 +138,7 @@ export async function POST({ request, locals, params, getClientAddress }) {
 	// Pass userid and sessionId to the model as a configurable
 	model.config.configurable.user_id = String(userId);
 	model.config.configurable.session_id = String(id);
-
-	//console.log("-------------->>> ", request.headers.get('cookie') );
+	model.config.configurable.cookie = String(request.headers.get('cookie'));
 
 	// finally parse the content of the request
 	const form = await request.formData();
@@ -390,7 +394,10 @@ export async function POST({ request, locals, params, getClientAddress }) {
 				// by padding the text with null chars to a fixed length
 				// https://cdn.arstechnica.net/wp-content/uploads/2024/03/LLM-Side-Channel.pdf
 				if (event.type === MessageUpdateType.Stream) {
-					event = { ...event, token: event.token.padEnd(16, "\0") };
+					function padEnd(str, length, char) {
+						return str + char.repeat(Math.max(0, length - str.length));
+					}
+					event = { ...event, token: padEnd( event.token, 16, "\0") };
 				}
 
 				// Send the update to the client
@@ -455,88 +462,35 @@ export async function POST({ request, locals, params, getClientAddress }) {
 
 
 
+			// Log Messages into ElasticSearch
+			if(env.ELASTICSEARCH_LOG_ENABLED == 'true'){
+				//console.log(`-------->>> Cookie: ${model.config.configurable.cookie}`);
+				//console.log(`--------------->>>>> User ID: ${userId} | Session ID: ${convId} | Cookie: ` );
+				let responseMessage = messageToWriteTo.content,
+				responseMessageId = String(messageToWriteToId);
+				let ms = messagesForPrompt.filter(m=> ("from" in m && m['from'] == "user") );
+				// Get last Message
+				let questionMessage = ms[ms.length - 1].content,
+					questionMessageId = ms[ms.length - 1].id;
 
-
-			// Query latest message from ElasticSearch
-			let r = await fetch("http://eschat:9200/ati-search-history/_search", {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-				},
-				body: JSON.stringify({
-					"size": 1,
-					"sort": [
-					{
-						"created_at": {
-						"order": "desc"
-						}
+				// Init connection to ElasticSearch
+				let es_client = new Client({
+					node: `${env.ELASTICSEARCH_LOG_SCHEME}://${env.ELASTICSEARCH_LOG_HOST}:${env.ELASTICSEARCH_LOG_PORT}`,
+					auth: {
+					  username: env.ELASTICSEARCH_LOG_USERNAME,
+					  password: env.ELASTICSEARCH_LOG_PASSWORD
 					}
-					],
-					"query": {
-					"bool": {
-						"must": [
-							{
-							"match": {
-								"user_id": `${userId}`
-							}
-							},
-							{
-							"match": {
-								"session_id": `${convId}`
-							}
-							}
-						]
-					}
-					}
-				}),
-			});
+				});
 
-			if(r.ok){
-				let res = await r.json();
-				res = res.hits.hits;
-				if(res.length > 0){
-					const ESmessageID = res[0]._source.message_id;
+				// Save the Question Message to ElasticSearch
+				ESChatHistorySave(String(userId), String(convId), questionMessageId, questionMessage, es_client);
+				// Save the Answer Message to ElasticSearch
+				ESChatHistorySave(String(userId), String(convId), responseMessageId, responseMessage, es_client);
+				
+				// Close connection to elasticsearch
+				es_client.close();
 
-					// Update and set the ES message ID to the Message to Write ID
-					r = await fetch("http://eschat:9200/ati-search-history/_update_by_query", {
-						method: "POST",
-						headers: {
-							"Content-Type": "application/json",
-						},
-						body: JSON.stringify({
-							"script": {
-							"inline": `ctx._source.message_id = '${messageToWriteToId}'`,
-							"lang": "painless"
-							},
-							"query": {
-							"bool": {
-								"must": [
-									{
-									"match": {
-										"message_id": `${ESmessageID}`
-									}
-									},
-									{
-									"match": {
-										"user_id": `${userId}`
-									}
-									},
-									{
-									"match": {
-										"session_id": `${convId}`
-									}
-									}
-								]
-							}
-							}
-						}),
-					});
-					
-				}
 			}
-			// End of Updating ES
-
-
 
 
 
@@ -583,6 +537,11 @@ export async function DELETE({ locals, params }) {
 	}
 
 	await collections.conversations.deleteOne({ _id: conv._id });
+
+
+	// Delete a conversation
+	ESChatHistoryDelete( String(convId) );
+
 
 	return new Response();
 }

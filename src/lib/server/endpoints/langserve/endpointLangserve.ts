@@ -17,24 +17,31 @@ export function endpointLangserve(
 	const { url, model } = endpointLangserveParametersSchema.parse(input);
 
 	return async ({ messages, preprompt, continueMessage }) => {
+		const prompt = await buildPrompt({
+			messages,
+			continueMessage,
+			preprompt,
+			model,
+		});
 
 		// Get the messages that are from users
 		let ms = messages.filter(m=> ( ("id" in m) && ("from" in m && m["from"] == "user") ) );
 
-		if(ms.length <= 0){
-			return (async function*() { return; })();
-		}
+		//console.log("Cookie--------------------------->>>", model.config.configurable.cookie, model.config.configurable.session_id);
+		//console.log("Messages: --------------------->>>", messages.length );
 
 		const r = await fetch(`${url}/stream`, {
+			credentials: "same-origin",
 			method: "POST",
 			headers: {
 				"Content-Type": "application/json",
+				"Cookie": model.config.configurable.cookie
 			},
 			body: JSON.stringify({
-				input: ms.length <= 0 ? "" : ms[ms.length - 1].content , //{ text: prompt },
+				input: ms.length <= 0? prompt : ms[ms.length - 1].content , //prompt,
 				config: { configurable: {
-								user_id: model.config.configurable.user_id,
-								session_id: model.config.configurable.session_id
+								user_id: ms.length <= 0 ? "-1" : model.config.configurable.user_id,
+								session_id: ms.length <= 0 ? "-1" : model.config.configurable.session_id
 							} },
 			}),
 		});
@@ -48,9 +55,10 @@ export function endpointLangserve(
 
 		return (async function* () {
 			let stop = false;
+			let generatedText = "";
+			let context = [];
 			let tokenId = 0;
-
-			let _generatedText = "";
+			let accumulatedData = ""; // Buffer to accumulate data chunks
 
 			while (!stop) {
 				// Read the stream and log the outputs to console
@@ -66,19 +74,22 @@ export function endpointLangserve(
 					return;
 				}
 
+				// Accumulate the data chunk
+				accumulatedData += out.value;
 				// Keep read data to check event type
 				const eventData = out.value;
 
-				let split_arr = eventData.split("\r\n");
-				let i = 0;
-				let o = split_arr[i];
-				let _data = "";
-				while( i < split_arr.length){
+				// Process each complete JSON object in the accumulated data
+				while (accumulatedData.includes("\n")) {
+					// Assuming each JSON object ends with a newline
+					const endIndex = accumulatedData.indexOf("\n");
+					let jsonString = accumulatedData.substring(0, endIndex).trim();
+					// Remove the processed part from the buffer
 
-					if( split_arr.length > i && o.startsWith("event: data") && split_arr[i + 1].startsWith("data: ") )
-						_data += split_arr[i + 1].slice(6);
-					else if(o.startsWith("event: end")){
-						// Stopping with end event
+					accumulatedData = accumulatedData.substring(endIndex + 1);
+
+					// Stopping with end event
+					if (eventData.startsWith("event: end")) {
 						stop = true;
 						yield {
 							token: {
@@ -87,42 +98,53 @@ export function endpointLangserve(
 								logprob: 0,
 								special: true,
 							},
-							generated_text: _generatedText,
+							generated_text: generatedText,
 							details: null,
 						} satisfies TextGenerationStreamOutput;
 						reader?.cancel();
-						break;
+						continue;
 					}
-					i++;
-					o = split_arr[i];
-				}
 
+					if (eventData.startsWith("event: data") && jsonString.startsWith("data: ")) {
+						jsonString = jsonString.slice(6);
+						let data = null;
 
-				if (_data != "") {
-
-					// Handle the parsed data
-					try {
-						_data = JSON.parse(_data);
-					} catch (e) {
-						logger.error(e, "Failed to parse JSON");
-						logger.error(_data, "Problematic JSON string:");
-						continue; // Skip this iteration and try the next chunk
+						// Handle the parsed data
+						try {
+							data = JSON.parse(jsonString);
+						} catch (e) {
+							logger.error(e, "Failed to parse JSON");
+							logger.error(jsonString, "Problematic JSON string:");
+							continue; // Skip this iteration and try the next chunk
+						}
+						// Assuming content within data is a plain string
+						if (data) {
+							// Pull out the Context and answer seperately
+							let _context = {},
+								_answer = "";
+							if(data.hasOwnProperty("answer")){
+								_answer = data['answer'];
+							}
+							if(data.hasOwnProperty("context")){
+								_context = data['context'];
+							}
+							generatedText += _answer;
+							if(_context.length > 0)
+								context = context.concat(_context);
+							const output: TextGenerationStreamOutput = {
+								token: {
+									id: tokenId++,
+									text: _answer,
+									logprob: 0,
+									special: false,
+								},
+								generated_text: null,
+								details: null,
+							};
+							yield output;
+						}
 					}
-				
-					_generatedText += _data['answer'];
-					const output: TextGenerationStreamOutput = {
-						token: {
-							id: tokenId++,
-							text: _data['answer'],
-							logprob: 0,
-							special: false,
-						},
-						generated_text: null,
-						details: null,
-					};
-					yield output;
 				}
-
 			}
 		})();
 	};
