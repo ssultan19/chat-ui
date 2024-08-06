@@ -65,11 +65,14 @@ const modelConfig = z.object({
 	tools: z.boolean().default(false),
 	unlisted: z.boolean().default(false),
 	embeddingModel: validateEmbeddingModelByName(embeddingModels).optional(),
-	configurable: z.object({
-		user_id: z.string().default("-1"),
-		session_id: z.string().default("-1"),
-		cookie: z.string().default("")
-	}).passthrough().default({}),
+	configurable: z
+		.object({
+			user_id: z.string().default("-1"),
+			session_id: z.string().default("-1"),
+			cookie: z.string().default(""),
+		})
+		.passthrough()
+		.default({}),
 });
 
 const modelsRaw = z.array(modelConfig).parse(JSON5.parse(env.MODELS));
@@ -101,7 +104,10 @@ async function getChatPromptRender(
 
 	const renderTemplate = ({ messages, preprompt, tools, toolResults }: ChatTemplateInput) => {
 		let formattedMessages: { role: string; content: string }[] = messages.map((message) => ({
-			content: message.content,
+			content:
+				message.files?.length && !tools?.length
+					? message.content + `\n This message has ${message.files.length} files attached`
+					: message.content,
 			role: message.from,
 		}));
 
@@ -118,32 +124,69 @@ async function getChatPromptRender(
 		if (toolResults?.length) {
 			// todo: should update the command r+ tokenizer to support system messages at any location
 			// or use the `rag` mode without the citations
-			formattedMessages = [
-				{
-					role: "system",
-					content:
-						"\n\n<results>\n" +
-						toolResults
-							.flatMap((result, idx) => {
-								if (result.status === ToolResultStatus.Error) {
+			const id = m.id ?? m.name;
+
+			if (id.startsWith("CohereForAI")) {
+				formattedMessages = [
+					{
+						role: "system",
+						content:
+							"\n\n<results>\n" +
+							toolResults
+								.flatMap((result, idx) => {
+									if (result.status === ToolResultStatus.Error) {
+										return (
+											`Document: ${idx}\n` + `Tool "${result.call.name}" error\n` + result.message
+										);
+									}
 									return (
-										`Document: ${idx}\n` + `Tool "${result.call.name}" error\n` + result.message
+										`Document: ${idx}\n` +
+										result.outputs
+											.flatMap((output) =>
+												Object.entries(output).map(([title, text]) => `${title}\n${text}`)
+											)
+											.join("\n")
 									);
-								}
-								return (
-									`Document: ${idx}\n` +
-									result.outputs
-										.flatMap((output) =>
-											Object.entries(output).map(([title, text]) => `${title}\n${text}`)
-										)
-										.join("\n")
-								);
-							})
-							.join("\n\n") +
-						"\n</results>",
-				},
-				...formattedMessages,
-			];
+								})
+								.join("\n\n") +
+							"\n</results>",
+					},
+					...formattedMessages,
+				];
+			} else if (id.startsWith("meta-llama")) {
+				const results = toolResults.flatMap((result) => {
+					if (result.status === ToolResultStatus.Error) {
+						return [
+							{
+								tool_call_id: result.call.name,
+								output: "Error: " + result.message,
+							},
+						];
+					} else {
+						logger.info(result.outputs);
+						return result.outputs.map((output) => ({
+							tool_call_id: result.call.name,
+							output: JSON.stringify(output),
+						}));
+					}
+				});
+
+				formattedMessages = [
+					...formattedMessages,
+					{
+						role: "python",
+						content: JSON.stringify(results),
+					},
+				];
+			} else {
+				formattedMessages = [
+					...formattedMessages,
+					{
+						role: "system",
+						content: JSON.stringify(toolResults),
+					},
+				];
+			}
 			tools = [];
 		}
 
@@ -192,7 +235,7 @@ const processModel = async (m: z.infer<typeof modelConfig>) => ({
 	displayName: m.displayName || m.name,
 	preprompt: m.prepromptUrl ? await fetch(m.prepromptUrl).then((r) => r.text()) : m.preprompt,
 	parameters: { ...m.parameters, stop_sequences: m.parameters?.stop },
-	config: {configurable: m.configurable}
+	config: { configurable: m.configurable },
 });
 
 export type ProcessedModel = Awaited<ReturnType<typeof processModel>> & {
@@ -236,6 +279,8 @@ const addEndpoint = (m: Awaited<ReturnType<typeof processModel>>) => ({
 						return endpoints.ollama(args);
 					case "vertex":
 						return await endpoints.vertex(args);
+					case "genai":
+						return await endpoints.genai(args);
 					case "cloudflare":
 						return await endpoints.cloudflare(args);
 					case "cohere":
