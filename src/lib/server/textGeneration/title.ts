@@ -64,6 +64,8 @@ export async function generateTitle(prompt: string) {
 		},
 	})
 		.then((summary) => {
+			// Make sure summary has no references in its title
+			summary = summary.split("\n\n---\nReferences:\n")[0];
 			// add an emoji if none is found in the first three characters
 			if (!/\p{Emoji}/u.test(summary.slice(0, 3))) {
 				return "💬 " + summary;
