@@ -4,17 +4,17 @@ import type { Endpoint } from "../endpoints";
 import type { TextGenerationStreamOutput } from "@huggingface/inference";
 import { logger } from "$lib/server/logger";
 
-export const endpointLangserveParametersSchema = z.object({
+export const endpointAtiLangserveParametersSchema = z.object({
 	weight: z.number().int().positive().default(1),
 	model: z.any(),
-	type: z.literal("langserve"),
+	type: z.literal("atilangserve"),
 	url: z.string().url(),
 });
 
-export function endpointLangserve(
-	input: z.input<typeof endpointLangserveParametersSchema>
+export function endpointAtiLangserve(
+	input: z.input<typeof endpointAtiLangserveParametersSchema>
 ): Endpoint {
-	const { url, model } = endpointLangserveParametersSchema.parse(input);
+	const { url, model } = endpointAtiLangserveParametersSchema.parse(input);
 
 	return async ({ messages, preprompt, continueMessage }) => {
 		const prompt = await buildPrompt({
@@ -24,16 +24,25 @@ export function endpointLangserve(
 			model,
 		});
 
-		console.log("---------------->>>>>", url);
-		console.log("Getting Title", prompt);
+		// Get the messages that are from users
+		let ms = messages.filter(m=> ( ("id" in m) && ("from" in m && m["from"] == "user") ) );
+
+		//console.log("Cookie--------------------------->>>", model.config.configurable.cookie, model.config.configurable.session_id);
+		//console.log("Messages: --------------------->>>", messages.length );
 
 		const r = await fetch(`${url}/stream`, {
+			credentials: "same-origin",
 			method: "POST",
 			headers: {
 				"Content-Type": "application/json",
+				"Cookie": model.config.configurable.cookie
 			},
 			body: JSON.stringify({
-				input: {text: prompt},
+				input: ms.length <= 0? prompt : ms[ms.length - 1].content,
+				config: { configurable: {
+								user_id: ms.length <= 0 ? "-1" : model.config.configurable.user_id,
+								session_id: ms.length <= 0 ? "-1" : model.config.configurable.session_id
+							} },
 			}),
 		});
 
@@ -47,6 +56,7 @@ export function endpointLangserve(
 		return (async function* () {
 			let stop = false;
 			let generatedText = "";
+			let context = [];
 			let tokenId = 0;
 			let accumulatedData = ""; // Buffer to accumulate data chunks
 
@@ -109,11 +119,22 @@ export function endpointLangserve(
 						}
 						// Assuming content within data is a plain string
 						if (data) {
-							generatedText += data;
+							// Pull out the Context and answer seperately
+							let _context = {},
+								_answer = "";
+							if(data.hasOwnProperty("answer")){
+								_answer = data['answer'];
+							}
+							if(data.hasOwnProperty("context")){
+								_context = data['context'];
+							}
+							generatedText += _answer;
+							if(_context.length > 0)
+								context = context.concat(_context);
 							const output: TextGenerationStreamOutput = {
 								token: {
 									id: tokenId++,
-									text: data,
+									text: _answer,
 									logprob: 0,
 									special: false,
 								},
@@ -129,4 +150,4 @@ export function endpointLangserve(
 	};
 }
 
-export default endpointLangserve;
+export default endpointAtiLangserve;
