@@ -24,16 +24,13 @@ export function endpointLangserve(
 			model,
 		});
 
-		console.log("---------------->>>>>", url);
-		console.log("Getting Title", prompt);
-
 		const r = await fetch(`${url}/stream`, {
 			method: "POST",
 			headers: {
 				"Content-Type": "application/json",
 			},
 			body: JSON.stringify({
-				input: {text: prompt},
+				input: { text: prompt },
 			}),
 		});
 
