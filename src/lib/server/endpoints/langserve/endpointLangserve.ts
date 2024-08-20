@@ -30,7 +30,7 @@ export function endpointLangserve(
 				"Content-Type": "application/json",
 			},
 			body: JSON.stringify({
-				input: { text: prompt },
+				input: prompt, //{ text: prompt },
 			}),
 		});
 
