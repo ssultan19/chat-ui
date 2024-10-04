@@ -25,7 +25,7 @@ export function endpointAtiLangserve(
 		});
 
 		// Get the messages that are from users
-		let ms = messages.filter(m=> ( ("id" in m) && ("from" in m && m["from"] == "user") ) );
+		const ms = messages.filter((m) => "id" in m && "from" in m && m["from"] == "user");
 
 		//console.log("Cookie--------------------------->>>", model.config.configurable.cookie, model.config.configurable.session_id);
 		//console.log("Messages: --------------------->>>", messages.length );
@@ -35,14 +35,16 @@ export function endpointAtiLangserve(
 			method: "POST",
 			headers: {
 				"Content-Type": "application/json",
-				"Cookie": model.config.configurable.cookie
+				Cookie: model.config.configurable.cookie,
 			},
 			body: JSON.stringify({
-				input: ms.length <= 0? prompt : ms[ms.length - 1].content,
-				config: { configurable: {
-								user_id: ms.length <= 0 ? "-1" : model.config.configurable.user_id,
-								session_id: ms.length <= 0 ? "-1" : model.config.configurable.session_id
-							} },
+				input: ms.length <= 0 ? prompt : ms[ms.length - 1].content,
+				config: {
+					configurable: {
+						user_id: ms.length <= 0 ? "-1" : model.config.configurable.user_id,
+						session_id: ms.length <= 0 ? "-1" : model.config.configurable.session_id,
+					},
+				},
 			}),
 		});
 
@@ -122,15 +124,14 @@ export function endpointAtiLangserve(
 							// Pull out the Context and answer seperately
 							let _context = {},
 								_answer = "";
-							if(data.hasOwnProperty("answer")){
-								_answer = data['answer'];
+							if (data.hasOwnProperty("answer")) {
+								_answer = data["answer"];
 							}
-							if(data.hasOwnProperty("context")){
-								_context = data['context'];
+							if (data.hasOwnProperty("context")) {
+								_context = data["context"];
 							}
 							generatedText += _answer;
-							if(_context.length > 0)
-								context = context.concat(_context);
+							if (_context.length > 0) context = context.concat(_context);
 							const output: TextGenerationStreamOutput = {
 								token: {
 									id: tokenId++,
