@@ -66,6 +66,14 @@ const modelConfig = z.object({
 	tools: z.boolean().default(false),
 	unlisted: z.boolean().default(false),
 	embeddingModel: validateEmbeddingModelByName(embeddingModels).optional(),
+	configurable: z
+		.object({
+			user_id: z.string().default("-1"),
+			session_id: z.string().default("-1"),
+			cookie: z.string().default(""),
+		})
+		.passthrough()
+		.default({}),
 });
 
 const modelsRaw = z.array(modelConfig).parse(JSON5.parse(env.MODELS));
@@ -252,6 +260,7 @@ const processModel = async (m: z.infer<typeof modelConfig>) => ({
 	displayName: m.displayName || m.name,
 	preprompt: m.prepromptUrl ? await fetch(m.prepromptUrl).then((r) => r.text()) : m.preprompt,
 	parameters: { ...m.parameters, stop_sequences: m.parameters?.stop },
+	config: { configurable: m.configurable },
 });
 
 const addEndpoint = (m: Awaited<ReturnType<typeof processModel>>) => ({
@@ -301,6 +310,8 @@ const addEndpoint = (m: Awaited<ReturnType<typeof processModel>>) => ({
 						return await endpoints.cohere(args);
 					case "langserve":
 						return await endpoints.langserve(args);
+					case "atilangserve":
+						return await endpoints.atilangserve(args);
 					default:
 						// for legacy reason
 						return endpoints.tgi(args);

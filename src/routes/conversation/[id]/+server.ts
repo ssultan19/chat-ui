@@ -1,4 +1,6 @@
 import { env } from "$env/dynamic/private";
+//import { env } from "$env/dynamic/private";
+//import { env as envPublic } from "$env/dynamic/public";
 import { startOfHour } from "date-fns";
 import { authCondition, requiresUser } from "$lib/server/auth";
 import { collections } from "$lib/server/database";
@@ -24,6 +26,9 @@ import { MetricsServer } from "$lib/server/metrics";
 import { textGeneration } from "$lib/server/textGeneration";
 import type { TextGenerationContext } from "$lib/server/textGeneration/types";
 import { logger } from "$lib/server/logger.js";
+import { ESChatHistorySave, ESChatHistoryDelete } from "$lib/utils/elasticsearchLog.js";
+import { Client } from '@elastic/elasticsearch';
+
 
 export async function POST({ request, locals, params, getClientAddress }) {
 	const id = z.string().parse(params.id);
@@ -130,6 +135,11 @@ export async function POST({ request, locals, params, getClientAddress }) {
 	if (!model) {
 		error(410, "Model not available anymore");
 	}
+
+	// Pass userid and sessionId to the model as a configurable
+	model.config.configurable.user_id = String(userId);
+	model.config.configurable.session_id = String(id);
+	model.config.configurable.cookie = String(request.headers.get('cookie'));
 
 	// finally parse the content of the request
 	const form = await request.formData();
@@ -402,7 +412,10 @@ export async function POST({ request, locals, params, getClientAddress }) {
 				// by padding the text with null chars to a fixed length
 				// https://cdn.arstechnica.net/wp-content/uploads/2024/03/LLM-Side-Channel.pdf
 				if (event.type === MessageUpdateType.Stream) {
-					event = { ...event, token: event.token.padEnd(16, "\0") };
+					function padEnd(str, length, char) {
+						return str + char.repeat(Math.max(0, length - str.length));
+					}
+					event = { ...event, token: padEnd( event.token, 16, "\0") };
 				}
 
 				// Send the update to the client
@@ -466,6 +479,41 @@ export async function POST({ request, locals, params, getClientAddress }) {
 			// used to detect if cancel() is called bc of interrupt or just because the connection closes
 			doneStreaming = true;
 
+
+
+			// Log Messages into ElasticSearch
+			if(env.ELASTICSEARCH_LOG_ENABLED == 'true'){
+				//console.log(`-------->>> Cookie: ${model.config.configurable.cookie}`);
+				//console.log(`--------------->>>>> User ID: ${userId} | Session ID: ${convId} | Cookie: ` );
+				let responseMessage = messageToWriteTo.content,
+				responseMessageId = String(messageToWriteToId);
+				let ms = messagesForPrompt.filter(m=> ("from" in m && m['from'] == "user") );
+				// Get last Message
+				let questionMessage = ms[ms.length - 1].content,
+					questionMessageId = ms[ms.length - 1].id;
+
+				// Init connection to ElasticSearch
+				let es_client = new Client({
+					node: `${env.ELASTICSEARCH_LOG_SCHEME}://${env.ELASTICSEARCH_LOG_HOST}:${env.ELASTICSEARCH_LOG_PORT}`,
+					auth: {
+					  username: env.ELASTICSEARCH_LOG_USERNAME,
+					  password: env.ELASTICSEARCH_LOG_PASSWORD
+					}
+				});
+
+				// Save the Question Message to ElasticSearch
+				ESChatHistorySave(String(userId), String(convId), questionMessageId, questionMessage, es_client);
+				// Save the Answer Message to ElasticSearch
+				ESChatHistorySave(String(userId), String(convId), responseMessageId, responseMessage, es_client);
+				
+				// Close connection to elasticsearch
+				es_client.close();
+
+			}
+
+
+
+
 			controller.close();
 		},
 		async cancel() {
@@ -508,6 +556,11 @@ export async function DELETE({ locals, params }) {
 	}
 
 	await collections.conversations.deleteOne({ _id: conv._id });
+
+
+	// Delete a conversation
+	ESChatHistoryDelete( String(convId) );
+
 
 	return new Response();
 }

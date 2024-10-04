@@ -27,6 +27,9 @@ import { endpointCohere, endpointCohereParametersSchema } from "./cohere/endpoin
 import endpointLangserve, {
 	endpointLangserveParametersSchema,
 } from "./langserve/endpointLangserve";
+import endpointAtiLangserve, {
+	endpointAtiLangserveParametersSchema,
+} from "./ati/atiLangserve";
 
 import type { Tool, ToolCall, ToolResult } from "$lib/types/Tool";
 
@@ -72,6 +75,7 @@ export const endpoints = {
 	cloudflare: endpointCloudflare,
 	cohere: endpointCohere,
 	langserve: endpointLangserve,
+	atilangserve: endpointAtiLangserve,
 };
 
 export const endpointSchema = z.discriminatedUnion("type", [
@@ -88,5 +92,6 @@ export const endpointSchema = z.discriminatedUnion("type", [
 	endpointCloudflareParametersSchema,
 	endpointCohereParametersSchema,
 	endpointLangserveParametersSchema,
+	endpointAtiLangserveParametersSchema,
 ]);
 export default endpoints;

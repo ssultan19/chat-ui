@@ -79,7 +79,8 @@
 				Model website
 			</a>
 		{/if}
-
+		
+		<!--
 		{#if model.hasInferenceAPI}
 			<a
 				href={"https://huggingface.co/playground?modelId=" + model.name}
@@ -100,8 +101,23 @@
 				<CarbonLink />Copy direct link to model
 			</div>
 		</CopyToClipBoardBtn>
+		-->
+		<!-- Model URL -->
+		{#if false}
+			<CopyToClipBoardBtn
+				value="{envPublic.PUBLIC_ORIGIN || $page.url.origin}{base}/models/{model.id}"
+				classNames="!border-none !shadow-none !py-0 !px-1 !rounded-md"
+			>
+				<div class="flex items-center gap-1.5 hover:underline">
+					<CarbonLink />Copy direct link to model
+				</div>
+			</CopyToClipBoardBtn>
+		{/if}
+		<!-- Model URL -->
+
 	</div>
 
+	<!-- Active Button -->
 	<button
 		class="my-2 flex w-fit items-center rounded-full bg-black px-3 py-1 text-base !text-white"
 		name="Activate model"
@@ -115,32 +131,40 @@
 		<CarbonChat class="mr-1.5 text-sm" />
 		New chat
 	</button>
+	<!-- End of Active button -->
 
-	<div class="relative flex w-full flex-col gap-2">
-		<div class="flex w-full flex-row content-between">
-			<h3 class="mb-1.5 text-lg font-semibold text-gray-800">System Prompt</h3>
-			{#if hasCustomPreprompt}
-				<button
-					class="ml-auto underline decoration-gray-300 hover:decoration-gray-700"
-					on:click|stopPropagation={() =>
-						($settings.customPrompts[$page.params.model] = model.preprompt)}
-				>
-					Reset
-				</button>
+
+	<!-- Hide System prompt -->
+	{#if false}
+		<div class="relative flex w-full flex-col gap-2">
+			<div class="flex w-full flex-row content-between">
+				<h3 class="mb-1.5 text-lg font-semibold text-gray-800">System Prompt</h3>
+				{#if hasCustomPreprompt}
+					<button
+						class="ml-auto underline decoration-gray-300 hover:decoration-gray-700"
+						on:click|stopPropagation={() =>
+							($settings.customPrompts[$page.params.model] = model.preprompt)}
+					>
+						Reset
+					</button>
+				{/if}
+			</div>
+			<textarea
+				rows="10"
+				class="w-full resize-none rounded-md border-2 bg-gray-100 p-2"
+				bind:value={$settings.customPrompts[$page.params.model]}
+			/>
+			{#if model.tokenizer && $settings.customPrompts[$page.params.model]}
+				<TokensCounter
+					classNames="absolute bottom-2 right-2"
+					prompt={$settings.customPrompts[$page.params.model]}
+					modelTokenizer={model.tokenizer}
+					truncate={model?.parameters?.truncate}
+				/>
 			{/if}
 		</div>
-		<textarea
-			rows="10"
-			class="w-full resize-none rounded-md border-2 bg-gray-100 p-2"
-			bind:value={$settings.customPrompts[$page.params.model]}
-		/>
-		{#if model.tokenizer && $settings.customPrompts[$page.params.model]}
-			<TokensCounter
-				classNames="absolute bottom-2 right-2"
-				prompt={$settings.customPrompts[$page.params.model]}
-				modelTokenizer={model.tokenizer}
-				truncate={model?.parameters?.truncate}
-			/>
-		{/if}
-	</div>
+	{/if}
+	<!-- End of System prompt -->
+
+
 </div>

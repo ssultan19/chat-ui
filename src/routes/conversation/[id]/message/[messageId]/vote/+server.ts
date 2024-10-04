@@ -3,6 +3,8 @@ import { collections } from "$lib/server/database";
 import { error } from "@sveltejs/kit";
 import { ObjectId } from "mongodb";
 import { z } from "zod";
+import { ESChatHistoryUpdateScore } from "$lib/utils/elasticsearchLog.js";
+
 
 export async function POST({ params, request, locals }) {
 	const { score } = z
@@ -33,6 +35,13 @@ export async function POST({ params, request, locals }) {
 	if (!document.matchedCount) {
 		error(404, "Message not found");
 	}
+
+
+	// On Score Update
+	//console.log( "--------------->>>>", String(messageId), String(conversationId), score );
+	ESChatHistoryUpdateScore( String(conversationId), String(messageId), score );
+
+
 
 	return new Response();
 }

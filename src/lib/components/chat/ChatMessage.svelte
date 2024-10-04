@@ -57,7 +57,8 @@
 	}
 
 	function unsanitizeMd(md: string) {
-		return md.replaceAll("&lt;", "<");
+		let ans = md.replaceAll("&lt;", "<");
+		return ans;
 	}
 
 	export let model: Model;
@@ -284,7 +285,11 @@
 				{/if}
 				{#each tokens as token}
 					{#if token.type === "code"}
-						<CodeBlock lang={token.lang} code={unsanitizeMd(token.text)} />
+						{#if token.lang == "links"}
+							{@html unsanitizeMd(token.text)}
+						{:else}
+							<CodeBlock lang={token.lang} code={unsanitizeMd(token.text)} />
+						{/if}
 					{:else}
 						{#await marked.parse(token.raw, options) then parsed}
 							<!-- eslint-disable-next-line svelte/no-at-html-tags -->
